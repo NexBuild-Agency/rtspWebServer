@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -13,6 +15,90 @@ func HTTPAPIServerStreams(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(200, Message{Status: 1, Payload: list})
+}
+
+//HTTPAPIServerStreamsMultiControlDelete function delete multiple streams by keys
+func HTTPAPIServerStreamsMultiControlDelete(c *gin.Context) {
+    requestLogger := log.WithFields(logrus.Fields{
+        "module": "http_stream",
+        "func":   "HTTPAPIServerStreamsMultiControlDelete",
+    })
+
+    var payload []string
+    err := c.BindJSON(&payload)
+    if err != nil {
+        c.IndentedJSON(400, Message{Status: 0, Payload: err.Error()})
+        requestLogger.WithFields(logrus.Fields{
+            "call": "BindJSON",
+        }).Errorln(err.Error())
+        return
+    }
+    if len(payload) < 1 {
+        c.IndentedJSON(400, Message{Status: 0, Payload: ErrorStreamsLen0.Error()})
+        requestLogger.WithFields(logrus.Fields{
+            "call": "len(payload)",
+        }).Errorln(ErrorStreamsLen0.Error())
+        return
+    }
+    var resp = make(map[string]Message)
+    var FoundError bool
+    for _, key := range payload {
+        err := Storage.StreamDelete(key)
+        if err != nil {
+            requestLogger.WithFields(logrus.Fields{
+                "stream": key,
+                "call":   "StreamDelete",
+            }).Errorln(err.Error())
+            resp[key] = Message{Status: 0, Payload: err.Error()}
+            FoundError = true
+        } else {
+            resp[key] = Message{Status: 1, Payload: Success}
+        }
+    }
+    if FoundError {
+        c.IndentedJSON(200, Message{Status: 0, Payload: resp})
+    } else {
+        c.IndentedJSON(200, Message{Status: 1, Payload: resp})
+    }
+}
+
+// HTTPAPIServerStreamAddAuto creates a new stream with a server-generated UUID and returns it
+func HTTPAPIServerStreamAddAuto(c *gin.Context) {
+	var payload StreamST
+	err := c.BindJSON(&payload)
+	if err != nil {
+		c.IndentedJSON(400, Message{Status: 0, Payload: err.Error()})
+		log.WithFields(logrus.Fields{
+			"module": "http_stream",
+			"func":   "HTTPAPIServerStreamAddAuto",
+			"call":   "BindJSON",
+		}).Errorln(err.Error())
+		return
+	}
+	newID := uuid.NewString()
+	err = Storage.StreamAdd(newID, payload)
+	if err != nil {
+		c.IndentedJSON(500, Message{Status: 0, Payload: err.Error()})
+		log.WithFields(logrus.Fields{
+			"module": "http_stream",
+			"stream": newID,
+			"func":   "HTTPAPIServerStreamAddAuto",
+			"call":   "StreamAdd",
+		}).Errorln(err.Error())
+		return
+	}
+	// build webrtc URLs for channels in payload
+	scheme := "http"
+	if Storage.ServerHTTPS() {
+		scheme = "https"
+	}
+	host := c.Request.Host
+	base := fmt.Sprintf("%s://%s", scheme, host)
+	webrtcs := make(map[string]string)
+	for ch := range payload.Channels {
+		webrtcs[ch] = fmt.Sprintf("%s/stream/%s/channel/%s/webrtc?uuid=%s&channel=%s", base, newID, ch, newID, ch)
+	}
+	c.IndentedJSON(200, Message{Status: 1, Payload: gin.H{"uuid": newID, "webrtc": webrtcs}})
 }
 
 //HTTPAPIServerStreamsMultiControlAdd function add new stream's
@@ -50,52 +136,19 @@ func HTTPAPIServerStreamsMultiControlAdd(c *gin.Context) {
 			resp[k] = Message{Status: 0, Payload: err.Error()}
 			FoundError = true
 		} else {
-			resp[k] = Message{Status: 1, Payload: Success}
-		}
-	}
-	if FoundError {
-		c.IndentedJSON(200, Message{Status: 0, Payload: resp})
-	} else {
-		c.IndentedJSON(200, Message{Status: 1, Payload: resp})
-	}
-}
-
-//HTTPAPIServerStreamsMultiControlDelete function delete stream's
-func HTTPAPIServerStreamsMultiControlDelete(c *gin.Context) {
-	requestLogger := log.WithFields(logrus.Fields{
-		"module": "http_stream",
-		"func":   "HTTPAPIServerStreamsMultiControlDelete",
-	})
-
-	var payload []string
-	err := c.BindJSON(&payload)
-	if err != nil {
-		c.IndentedJSON(400, Message{Status: 0, Payload: err.Error()})
-		requestLogger.WithFields(logrus.Fields{
-			"call": "BindJSON",
-		}).Errorln(err.Error())
-		return
-	}
-	if len(payload) < 1 {
-		c.IndentedJSON(400, Message{Status: 0, Payload: ErrorStreamsLen0.Error()})
-		requestLogger.WithFields(logrus.Fields{
-			"call": "len(payload)",
-		}).Errorln(ErrorStreamsLen0.Error())
-		return
-	}
-	var resp = make(map[string]Message)
-	var FoundError bool
-	for _, key := range payload {
-		err := Storage.StreamDelete(key)
-		if err != nil {
-			requestLogger.WithFields(logrus.Fields{
-				"stream": key,
-				"call":   "StreamDelete",
-			}).Errorln(err.Error())
-			resp[key] = Message{Status: 0, Payload: err.Error()}
-			FoundError = true
-		} else {
-			resp[key] = Message{Status: 1, Payload: Success}
+			// build webrtc URLs for channels in payload
+			scheme := "http"
+			if Storage.ServerHTTPS() {
+				scheme = "https"
+			}
+			host := c.Request.Host
+			base := fmt.Sprintf("%s://%s", scheme, host)
+			uuid := k
+			webrtcs := make(map[string]string)
+			for ch := range v.Channels {
+				webrtcs[ch] = fmt.Sprintf("%s/stream/%s/channel/%s/webrtc?uuid=%s&channel=%s", base, uuid, ch, uuid, ch)
+			}
+			resp[k] = Message{Status: 1, Payload: gin.H{"uuid": uuid, "webrtc": webrtcs}}
 		}
 	}
 	if FoundError {
@@ -130,7 +183,19 @@ func HTTPAPIServerStreamAdd(c *gin.Context) {
 		}).Errorln(err.Error())
 		return
 	}
-	c.IndentedJSON(200, Message{Status: 1, Payload: Success})
+	// build webrtc URLs for channels in payload
+	scheme := "http"
+	if Storage.ServerHTTPS() {
+		scheme = "https"
+	}
+	host := c.Request.Host
+	base := fmt.Sprintf("%s://%s", scheme, host)
+	uuid := c.Param("uuid")
+	webrtcs := make(map[string]string)
+	for ch := range payload.Channels {
+		webrtcs[ch] = fmt.Sprintf("%s/stream/%s/channel/%s/webrtc?uuid=%s&channel=%s", base, uuid, ch, uuid, ch)
+	}
+	c.IndentedJSON(200, Message{Status: 1, Payload: gin.H{"uuid": uuid, "webrtc": webrtcs}})
 }
 
 //HTTPAPIServerStreamEdit function edit stream

@@ -65,6 +65,7 @@ func HTTPAPIServer() {
 	*/
 
 	privat.GET("/streams", HTTPAPIServerStreams)
+	privat.POST("/stream/add", HTTPAPIServerStreamAddAuto)
 	privat.POST("/stream/:uuid/add", HTTPAPIServerStreamAdd)
 	privat.POST("/stream/:uuid/edit", HTTPAPIServerStreamEdit)
 	privat.GET("/stream/:uuid/delete", HTTPAPIServerStreamDelete)

@@ -27,15 +27,5 @@
     },
     "webrtc_port_max": 0,
     "webrtc_port_min": 0
-  },
-  "streams": {
-    "2b59c133-b88b-484f-a059-857e2a2d1946": {
-      "channels": {
-        "0": {
-          "url": "rtsp://admin:%23Pharmacie%4077%25@127.0.0.1:25773/cam/realmonitor?channel=8\u0026subtype=0\u0026unicast=true\u0026proto=Onvif"
-        }
-      },
-      "name": "caam"
-    }
   }
 }

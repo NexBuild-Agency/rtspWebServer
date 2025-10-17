@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/deepch/vdk/av"
@@ -20,6 +22,8 @@ func (obj *StorageST) StreamChannelMake(val ChannelST) ChannelST {
 			"call":   "mergo.Merge",
 		}).Errorln(err.Error())
 	}
+	// Normalize RTSP URL: prefer subtype=1 to improve WebRTC compatibility
+	channel.URL = normalizeRTSPSubtype(channel.URL)
 	//make client's
 	channel.clients = make(map[string]ClientST)
 	//make last ack
@@ -29,6 +33,35 @@ func (obj *StorageST) StreamChannelMake(val ChannelST) ChannelST {
 	//make signals buffer chain
 	channel.signals = make(chan int, 100)
 	return channel
+}
+
+// normalizeRTSPSubtype ensures subtype=1 for common camera vendors when missing or set to 0
+// This helps avoid codec incompatibilities (e.g., forcing sub-stream H.264 over main H.265).
+func normalizeRTSPSubtype(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	q := u.Query()
+	st := q.Get("subtype")
+	lowerPath := strings.ToLower(u.Path)
+	looksLikeDahua := strings.Contains(lowerPath, "realmonitor")
+	looksLikeHik := strings.Contains(lowerPath, "/streaming/channels/")
+
+	if st == "0" {
+		q.Set("subtype", "1")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	if st == "" && (looksLikeDahua || looksLikeHik) {
+		q.Set("subtype", "1")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return raw
 }
 
 // StreamChannelRunAll run all stream go
