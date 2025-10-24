@@ -27,5 +27,15 @@
     },
     "webrtc_port_max": 0,
     "webrtc_port_min": 0
+  },
+  "streams": {
+    "f33a67d9-c2a5-40d9-9bf9-736a7dde7ae1": {
+      "channels": {
+        "0": {
+          "url": "rtsp://admin:L2D5F702@192.168.1.244:554/cam/realmonitor?channel=1\u0026proto=Onvif\u0026subtype=1\u0026unicast=true"
+        }
+      },
+      "name": "ClientId : 1 - Camera 1"
+    }
   }
 }
